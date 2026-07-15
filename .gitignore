@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Env / secrets
+.env
+*.db
+
+# Runtime data folders
+server/main/
+server/unmatched/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
