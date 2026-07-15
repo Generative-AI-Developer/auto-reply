@@ -19,6 +19,7 @@ export default function ClientPage() {
   const [q, setQ] = useState("");
   const [numbers, setNumbers] = useState<string[]>([]);
   const [numberInput, setNumberInput] = useState("");
+  const [requestType, setRequestType] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [caseOfficer, setCaseOfficer] = useState("");
   const [justification, setJustification] = useState("");
@@ -64,6 +65,7 @@ export default function ClientPage() {
     try {
       const created = await createRequest({
         numbers: all,
+        request_type: requestType,
         duration_days: durationDays ? parseInt(durationDays, 10) : null,
         case_officer: caseOfficer,
         justification,
@@ -72,6 +74,7 @@ export default function ClientPage() {
       setMsg(`Created ${created.request_id}`);
       setNumbers([]);
       setNumberInput("");
+      setRequestType("");
       setDurationDays("");
       setCaseOfficer("");
       setJustification("");
@@ -109,7 +112,9 @@ export default function ClientPage() {
               Import
             </button>
           </div>
-          <p className="muted">Columns: Numbers, Duration Days, Case Officer, Justification, Request Date</p>
+          <p className="muted">
+            Columns: Numbers, Request Type, Duration Days, Case Officer, Justification, Request Date
+          </p>
         </div>
 
         <form className="card" onSubmit={submit}>
@@ -149,6 +154,20 @@ export default function ClientPage() {
             </div>
           </div>
           <div className="row">
+            <div className="field">
+              <label>Request Type</label>
+              <input
+                list="request-type-options"
+                value={requestType}
+                onChange={(e) => setRequestType(e.target.value)}
+                placeholder="NIC, CDR, IPDR…"
+              />
+              <datalist id="request-type-options">
+                <option value="NIC" />
+                <option value="CDR" />
+                <option value="IPDR" />
+              </datalist>
+            </div>
             <div className="field">
               <label>Duration (days)</label>
               <input

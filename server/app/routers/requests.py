@@ -27,17 +27,17 @@ def _create_request(db: Session, owner: User, payload: RequestCreate) -> Request
     req = Request(
         request_id=f"tmp-{uuid4().hex}",
         owner_id=owner.id,
+        request_type=payload.request_type,
         duration_days=payload.duration_days,
         case_officer=payload.case_officer,
         justification=payload.justification,
         request_date=payload.request_date,
-        status=Status.PENDING,
     )
     db.add(req)
     db.flush()  # assigns req.id
     req.request_id = f"REQ-{req.id:05d}"
     for value in dict.fromkeys(numbers):  # de-dupe, preserve order
-        db.add(RequestIdentifier(request_id=req.id, value=value))
+        db.add(RequestIdentifier(request_id=req.id, value=value, status=Status.PENDING))
 
     # Permanent per-request folder inside the user's permanent folder, ready to
     # receive matched response files: main/<user_id>/<request_id>/
@@ -96,10 +96,17 @@ def list_requests(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Users see their own requests; admins see all. `q` searches Request ID + any number."""
+    """Users see their own requests; admins see all. `q` searches Request ID + any number.
+
+    `status_filter` matches requests that have AT LEAST ONE number in that status
+    (status is tracked per-number, not per-request).
+    """
     stmt = (
         select(Request)
-        .options(selectinload(Request.identifiers), selectinload(Request.files), selectinload(Request.owner))
+        .options(
+            selectinload(Request.identifiers).selectinload(RequestIdentifier.files),
+            selectinload(Request.owner),
+        )
         .order_by(Request.created_at.desc())
     )
 
@@ -116,7 +123,10 @@ def list_requests(
         stmt = stmt.where(or_(Request.request_id.ilike(like), number_match))
 
     if status_filter:
-        stmt = stmt.where(Request.status == status_filter)
+        status_match = exists().where(
+            (RequestIdentifier.request_id == Request.id) & (RequestIdentifier.status == status_filter)
+        )
+        stmt = stmt.where(status_match)
     if request_date:
         stmt = stmt.where(Request.request_date == request_date)
     if case_officer:
@@ -139,14 +149,17 @@ def get_request(
     return request_to_out(req)
 
 
-@router.patch("/{request_id}/status", response_model=RequestOut)
-def update_status(
+@router.patch("/{request_id}/numbers/{identifier_id}/status", response_model=RequestOut)
+def update_number_status(
     request_id: str,
+    identifier_id: int,
     payload: StatusUpdate,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Operator: manually set Awaited / No Data Found (Sent stays watcher-driven)."""
+    """Operator: manually set one number's status to Awaited / No Data Found
+    (Sent stays watcher-driven). Status is per-number, so this never affects
+    the other numbers on the same request."""
     if not payload.is_valid_manual():
         raise HTTPException(
             status_code=422,
@@ -155,11 +168,19 @@ def update_status(
     req = db.scalar(select(Request).where(Request.request_id == request_id))
     if req is None:
         raise HTTPException(status_code=404, detail="Request not found")
+    ident = next((i for i in req.identifiers if i.id == identifier_id), None)
+    if ident is None:
+        raise HTTPException(status_code=404, detail="Number not found on this request")
 
-    req.status = payload.status
+    ident.status = payload.status
     db.commit()
     db.refresh(req)
     manager.broadcast_threadsafe(
-        {"event": "status_changed", "request_id": req.request_id, "status": req.status}
+        {
+            "event": "status_changed",
+            "request_id": req.request_id,
+            "number": ident.value,
+            "status": ident.status,
+        }
     )
     return request_to_out(req)

@@ -1,10 +1,21 @@
 "use client";
 
-import { MANUAL_STATUSES, RequestItem } from "@/lib/types";
+import { MANUAL_STATUSES, RequestItem, RequestNumber } from "@/lib/types";
 
 function statusClass(status: string): string {
   if (status === "No Data Found") return "NoData";
   return status;
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+interface Row {
+  request: RequestItem;
+  number: RequestNumber | null;
 }
 
 export default function RequestsTable({
@@ -14,9 +25,15 @@ export default function RequestsTable({
 }: {
   requests: RequestItem[];
   showOwner?: boolean;
-  onStatusChange?: (requestId: string, status: string) => void;
+  onStatusChange?: (requestId: string, identifierId: number, status: string) => void;
 }) {
-  if (requests.length === 0) {
+  const rows: Row[] = requests.flatMap((r) =>
+    r.numbers.length > 0
+      ? r.numbers.map((n): Row => ({ request: r, number: n }))
+      : [{ request: r, number: null }]
+  );
+
+  if (rows.length === 0) {
     return <p className="muted">No requests found.</p>;
   }
 
@@ -25,9 +42,10 @@ export default function RequestsTable({
       <table>
         <thead>
           <tr>
-            <th>Request ID</th>
             {showOwner && <th>User</th>}
-            <th>Numbers</th>
+            <th>Request ID</th>
+            <th>Number</th>
+            <th>Request Type</th>
             <th>Days</th>
             <th>Case Officer</th>
             <th>Justification</th>
@@ -36,33 +54,33 @@ export default function RequestsTable({
           </tr>
         </thead>
         <tbody>
-          {requests.map((r) => (
-            <tr key={r.id}>
-              <td>{r.request_id}</td>
+          {rows.map(({ request: r, number: n }) => (
+            <tr key={n ? n.id : r.id}>
               {showOwner && <td>{r.owner_user_id}</td>}
-              <td>{r.numbers.join(", ")}</td>
+              <td>{r.request_id}</td>
+              <td>{n ? n.value : "—"}</td>
+              <td>{r.request_type || "—"}</td>
               <td>{r.duration_days ?? "—"}</td>
               <td>{r.case_officer || "—"}</td>
               <td>{r.justification || "—"}</td>
-              <td>{r.request_date || "—"}</td>
+              <td>{formatDateTime(r.created_at)}</td>
               <td>
-                {onStatusChange ? (
+                {n && onStatusChange ? (
                   <select
-                    value={MANUAL_STATUSES.includes(r.status as never) ? r.status : ""}
-                    onChange={(e) => e.target.value && onStatusChange(r.request_id, e.target.value)}
+                    value={MANUAL_STATUSES.includes(n.status as never) ? n.status : ""}
+                    onChange={(e) => e.target.value && onStatusChange(r.request_id, n.id, e.target.value)}
                   >
-                    <option value="">
-                      {r.status}
-                      {r.status === "Sent" || r.status === "Pending" ? " (auto)" : ""}
-                    </option>
+                    <option value="">{n.status}</option>
                     {MANUAL_STATUSES.map((s) => (
                       <option key={s} value={s}>
-                        Set: {s}
+                        {s}
                       </option>
                     ))}
                   </select>
+                ) : n ? (
+                  <span className={`status ${statusClass(n.status)}`}>{n.status}</span>
                 ) : (
-                  <span className={`status ${statusClass(r.status)}`}>{r.status}</span>
+                  "—"
                 )}
               </td>
             </tr>

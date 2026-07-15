@@ -66,6 +66,7 @@ export async function listRequests(params: {
 
 export async function createRequest(payload: {
   numbers: string[];
+  request_type: string;
   duration_days: number | null;
   case_officer: string;
   justification: string;
@@ -90,8 +91,12 @@ export async function importRequests(file: File): Promise<ImportResultShape> {
   return handle<ImportResultShape>(res);
 }
 
-export async function updateStatus(requestId: string, status: string): Promise<RequestItem> {
-  const res = await fetch(`${API_BASE}/requests/${requestId}/status`, {
+export async function updateNumberStatus(
+  requestId: string,
+  identifierId: number,
+  status: string
+): Promise<RequestItem> {
+  const res = await fetch(`${API_BASE}/requests/${requestId}/numbers/${identifierId}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ status }),

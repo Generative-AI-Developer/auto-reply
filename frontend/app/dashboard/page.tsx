@@ -9,7 +9,7 @@ import {
   getSession,
   listRequests,
   requestsSocket,
-  updateStatus,
+  updateNumberStatus,
 } from "@/lib/api";
 import { RequestItem } from "@/lib/types";
 
@@ -52,9 +52,9 @@ export default function DashboardPage() {
     return () => ws?.close();
   }, [refresh, router]);
 
-  async function onStatusChange(requestId: string, status: string) {
+  async function onStatusChange(requestId: string, identifierId: number, status: string) {
     try {
-      await updateStatus(requestId, status);
+      await updateNumberStatus(requestId, identifierId, status);
       refresh();
     } catch (e) {
       setErr((e as Error).message);

@@ -39,6 +39,7 @@ class UserOut(BaseModel):
 # --- Requests -----------------------------------------------------------------
 class RequestCreate(BaseModel):
     numbers: list[str] = Field(default_factory=list, description="mobile / NIC / any other numbers")
+    request_type: str = Field(default="", description="e.g. NIC, CDR, IPDR")
     duration_days: int | None = None
     case_officer: str = ""
     justification: str = ""
@@ -50,9 +51,17 @@ class ResponseFileOut(BaseModel):
 
     id: int
     original_filename: str
-    matched_value: str
     matched_date: date | None
     received_at: datetime
+
+
+class RequestNumberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    value: str
+    status: str
+    files: list[ResponseFileOut] = []
 
 
 class RequestOut(BaseModel):
@@ -61,14 +70,13 @@ class RequestOut(BaseModel):
     id: int
     request_id: str
     owner_user_id: str
-    numbers: list[str]
+    numbers: list[RequestNumberOut]
+    request_type: str
     duration_days: int | None
     case_officer: str
     justification: str
     request_date: date | None
-    status: str
     created_at: datetime
-    files: list[ResponseFileOut] = []
 
 
 class StatusUpdate(BaseModel):

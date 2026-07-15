@@ -1,8 +1,10 @@
-"""Match incoming-file identifiers against stored requests.
+"""Match incoming-file identifiers against stored request numbers.
 
-Rule (per plan): a Pending request matches when ANY of its numbers is in the
-incoming file's numbers AND its request_date equals the file's date. If the file
-exposes no date, fall back to the oldest Pending request carrying the number.
+Rule (per plan): a Pending number matches when its value is in the incoming
+file's numbers AND its parent request's request_date equals the file's date.
+Status is tracked per-number, so a response for one number in a request never
+affects the other numbers on that same request. If the file exposes no date,
+fall back to the oldest Pending number with that value.
 
 TODO(confirm): the date fallback assumes incoming files usually carry a date in
 their name/content. Revisit once real response files are available.
@@ -13,36 +15,35 @@ from __future__ import annotations
 from datetime import date
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..models import Request, RequestIdentifier, Status
 
 
-def find_matches(db: Session, numbers: set[str], file_date: date | None) -> list[Request]:
+def find_matches(db: Session, numbers: set[str], file_date: date | None) -> list[RequestIdentifier]:
     if not numbers:
         return []
 
     stmt = (
-        select(Request)
-        .join(RequestIdentifier, RequestIdentifier.request_id == Request.id)
+        select(RequestIdentifier)
+        .join(Request, Request.id == RequestIdentifier.request_id)
+        .options(selectinload(RequestIdentifier.request).selectinload(Request.owner))
         .where(
             RequestIdentifier.value.in_(numbers),
-            Request.status == Status.PENDING,
+            RequestIdentifier.status == Status.PENDING,
         )
     )
 
     if file_date is not None:
         stmt = stmt.where(Request.request_date == file_date)
-        return list(db.scalars(stmt).unique().all())
+        return list(db.scalars(stmt).all())
 
-    # No date on the file: fall back to the oldest Pending request per matched number.
-    candidates = list(db.scalars(stmt.order_by(Request.created_at.asc())).unique().all())
-    seen_numbers: set[str] = set()
-    chosen: list[Request] = []
-    for req in candidates:
-        req_numbers = {i.value for i in req.identifiers} & numbers
-        # keep this request only if it introduces a number not already served
-        if req_numbers - seen_numbers:
-            chosen.append(req)
-            seen_numbers |= req_numbers
+    # No date on the file: fall back to the oldest Pending identifier per value.
+    candidates = list(db.scalars(stmt.order_by(Request.created_at.asc())).all())
+    seen_values: set[str] = set()
+    chosen: list[RequestIdentifier] = []
+    for ident in candidates:
+        if ident.value not in seen_values:
+            chosen.append(ident)
+            seen_values.add(ident.value)
     return chosen

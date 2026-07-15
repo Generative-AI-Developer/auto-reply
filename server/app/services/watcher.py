@@ -5,10 +5,11 @@ Layout:
     main/<user_id>/                 created on Add User (permanent)
     main/<user_id>/<request_id>/    created on request submission (permanent)
 A raw file dropped directly in main/ (top level) is the "inbox": wait until its
-size is stable -> extract numbers+date -> find matching Pending requests -> move
-(or copy, if several requests match) the file into each matched request's
-folder, record a ResponseFile, flip status to Sent, broadcast. No match -> move
-to the unmatched folder for the operator to review.
+size is stable -> extract numbers+date -> find matching Pending numbers (each
+number tracks its own status) -> copy the file into each matched number's
+request folder, record a ResponseFile against that number, flip only that
+number's status to Sent, broadcast. No match -> move to the unmatched folder
+for the operator to review.
 
 The observer watches main/ non-recursively, so writes into the nested
 <user_id>/<request_id>/ folders never re-trigger processing.
@@ -77,40 +78,38 @@ def process_incoming_file(path: Path) -> list[str]:
             log.info("No match for %s -> moved to unmatched", path.name)
             return routed
 
-        for req in matches:
+        for ident in matches:
+            req = ident.request
             # Folder already exists (created eagerly at request-submission time).
             request_folder = Path(settings.main_dir) / req.owner.user_id / req.request_id
             request_folder.mkdir(parents=True, exist_ok=True)
             dest = _unique_dest(request_folder, path.name)
             shutil.copy2(str(path), str(dest))
 
-            matched_value = next(
-                (i.value for i in req.identifiers if i.value in numbers), ""
-            )
             db.add(
                 ResponseFile(
-                    request_id=req.id,
+                    identifier_id=ident.id,
                     original_filename=path.name,
                     stored_path=str(dest),
-                    matched_value=matched_value,
                     matched_date=file_date,
                 )
             )
-            req.status = Status.SENT
+            ident.status = Status.SENT
             routed.append(req.request_id)
 
         db.commit()
 
-        for req in matches:
+        for ident in matches:
             manager.broadcast_threadsafe(
                 {
                     "event": "status_changed",
-                    "request_id": req.request_id,
+                    "request_id": ident.request.request_id,
+                    "number": ident.value,
                     "status": Status.SENT,
                 }
             )
 
-    # Distributed to every owner; remove the original from the incoming folder.
+    # Distributed to every match; remove the original from the incoming folder.
     try:
         path.unlink(missing_ok=True)
     except OSError:

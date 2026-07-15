@@ -1,23 +1,30 @@
+export type RequestStatus = "Pending" | "Sent" | "Awaited" | "No Data Found";
+
 export interface ResponseFile {
   id: number;
   original_filename: string;
-  matched_value: string;
   matched_date: string | null;
   received_at: string;
+}
+
+export interface RequestNumber {
+  id: number;
+  value: string;
+  status: RequestStatus;
+  files: ResponseFile[];
 }
 
 export interface RequestItem {
   id: number;
   request_id: string;
   owner_user_id: string;
-  numbers: string[];
+  numbers: RequestNumber[];
+  request_type: string;
   duration_days: number | null;
   case_officer: string;
   justification: string;
   request_date: string | null;
-  status: "Pending" | "Sent" | "Awaited" | "No Data Found";
   created_at: string;
-  files: ResponseFile[];
 }
 
 export interface UserItem {
