@@ -7,6 +7,14 @@ function statusClass(status: string): string {
   return status;
 }
 
+// The underlying status stays "Sent" (used for matching/filtering); only the
+// client-facing label changes, since from the requester's point of view the
+// response has been received, not sent.
+function displayStatus(status: string, perspective: "admin" | "client"): string {
+  if (perspective === "client" && status === "Sent") return "Received";
+  return status;
+}
+
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -22,10 +30,12 @@ export default function RequestsTable({
   requests,
   showOwner = false,
   onStatusChange,
+  perspective = "admin",
 }: {
   requests: RequestItem[];
   showOwner?: boolean;
   onStatusChange?: (requestId: string, identifierId: number, status: string) => void;
+  perspective?: "admin" | "client";
 }) {
   const rows: Row[] = requests.flatMap((r) =>
     r.numbers.length > 0
@@ -70,7 +80,7 @@ export default function RequestsTable({
                     value={MANUAL_STATUSES.includes(n.status as never) ? n.status : ""}
                     onChange={(e) => e.target.value && onStatusChange(r.request_id, n.id, e.target.value)}
                   >
-                    <option value="">{n.status}</option>
+                    <option value="">{displayStatus(n.status, perspective)}</option>
                     {MANUAL_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {s}
@@ -78,7 +88,9 @@ export default function RequestsTable({
                     ))}
                   </select>
                 ) : n ? (
-                  <span className={`status ${statusClass(n.status)}`}>{n.status}</span>
+                  <span className={`status ${statusClass(n.status)}`}>
+                    {displayStatus(n.status, perspective)}
+                  </span>
                 ) : (
                   "—"
                 )}

@@ -26,6 +26,8 @@ export default function ClientPage() {
   const [requestDate, setRequestDate] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [importErr, setImportErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -87,16 +89,19 @@ export default function ClientPage() {
 
   async function onImport() {
     const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    setErr("");
-    setMsg("");
+    if (!file) {
+      setImportErr("Choose a file first.");
+      return;
+    }
+    setImportErr("");
+    setImportMsg("");
     try {
       const res = await importRequests(file);
-      setMsg(`Imported ${res.created} request(s), ${res.failed} failed.`);
+      setImportMsg(`Imported ${res.created} request(s), ${res.failed} failed.`);
       if (fileRef.current) fileRef.current.value = "";
       refresh();
     } catch (e) {
-      setErr((e as Error).message);
+      setImportErr((e as Error).message);
     }
   }
 
@@ -108,13 +113,15 @@ export default function ClientPage() {
           <h2>Bulk Import (Excel)</h2>
           <div className="row">
             <input ref={fileRef} type="file" accept=".xlsx,.xlsm" />
-            <button className="secondary" style={{ flex: "0 0 auto" }} onClick={onImport}>
+            <button type="button" className="secondary" style={{ flex: "0 0 auto" }} onClick={onImport}>
               Import
             </button>
           </div>
           <p className="muted">
             Columns: Numbers, Request Type, Duration Days, Case Officer, Justification, Request Date
           </p>
+          {importMsg && <div className="ok">{importMsg}</div>}
+          {importErr && <div className="error">{importErr}</div>}
         </div>
 
         <form className="card" onSubmit={submit}>
@@ -204,7 +211,7 @@ export default function ClientPage() {
               placeholder="🔍 Search by Request ID or number…"
             />
           </div>
-          <RequestsTable requests={requests} />
+          <RequestsTable requests={requests} perspective="client" />
         </div>
       </div>
     </>
