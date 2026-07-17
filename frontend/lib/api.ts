@@ -65,12 +65,12 @@ export async function listRequests(params: {
 }
 
 export async function createRequest(payload: {
+  request_number: string;
   numbers: string[];
   request_type: string;
   duration_days: number | null;
   case_officer: string;
   justification: string;
-  request_date: string | null;
 }): Promise<RequestItem> {
   const res = await fetch(`${API_BASE}/requests`, {
     method: "POST",

@@ -38,12 +38,12 @@ class UserOut(BaseModel):
 
 # --- Requests -----------------------------------------------------------------
 class RequestCreate(BaseModel):
-    numbers: list[str] = Field(default_factory=list, description="mobile / NIC / any other numbers")
+    request_number: str = Field(min_length=1, description="user-supplied, unique per requester")
+    numbers: list[str] = Field(default_factory=list, description="mobile / NIC / IMEI / any other numbers")
     request_type: str = Field(default="", description="e.g. NIC, CDR, IPDR")
     duration_days: int | None = None
     case_officer: str = ""
     justification: str = ""
-    request_date: date | None = None
 
 
 class ResponseFileOut(BaseModel):
@@ -69,6 +69,7 @@ class RequestOut(BaseModel):
 
     id: int
     request_id: str
+    request_number: str | None
     owner_user_id: str
     numbers: list[RequestNumberOut]
     request_type: str

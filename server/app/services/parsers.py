@@ -7,6 +7,7 @@ file's content. Numbers are normalized to digits-only so `0300-123 4567` and
 
 from __future__ import annotations
 
+import csv
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -87,6 +88,32 @@ def _read_content(path: Path) -> str:
     return ""
 
 
+def _a_number_column_values(path: Path) -> set[str] | None:
+    """CDR-style CSVs carry many digit-heavy columns (IMEI, IMSI, B Number,
+    Cell Id, lat/long...) that are noise for matching - only the "A Number"
+    column identifies the subject of the file. Returns None (not this
+    format) so the caller falls back to generic full-text extraction."""
+    if path.suffix.lower() != ".csv":
+        return None
+    try:
+        with path.open(newline="", encoding="utf-8-sig", errors="ignore") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            if "A Number" not in header:
+                return None
+            idx = header.index("A Number")
+            numbers: set[str] = set()
+            for row in reader:
+                if len(row) <= idx:
+                    continue
+                norm = normalize_number(row[idx])
+                if len(norm) >= MIN_DIGITS:
+                    numbers.add(norm)
+            return numbers
+    except (OSError, csv.Error, StopIteration):
+        return None
+
+
 def extract(path: Path) -> tuple[set[str], date | None]:
     """Return (candidate numbers, candidate date) for an incoming file."""
     path = Path(path)
@@ -94,6 +121,13 @@ def extract(path: Path) -> tuple[set[str], date | None]:
 
     found_date = extract_date_from_text(name)
     numbers = extract_numbers_from_text(_strip_dates(name))
+
+    a_number_values = _a_number_column_values(path)
+    if a_number_values is not None:
+        numbers |= a_number_values
+        if found_date is None:
+            found_date = extract_date_from_text(_read_content(path))
+        return numbers, found_date
 
     if not numbers or found_date is None:
         content = _read_content(path)

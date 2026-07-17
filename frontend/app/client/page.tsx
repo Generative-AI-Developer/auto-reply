@@ -17,13 +17,13 @@ export default function ClientPage() {
   const router = useRouter();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [q, setQ] = useState("");
+  const [requestNumber, setRequestNumber] = useState("");
   const [numbers, setNumbers] = useState<string[]>([]);
   const [numberInput, setNumberInput] = useState("");
   const [requestType, setRequestType] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [caseOfficer, setCaseOfficer] = useState("");
   const [justification, setJustification] = useState("");
-  const [requestDate, setRequestDate] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [importMsg, setImportMsg] = useState("");
@@ -58,6 +58,10 @@ export default function ClientPage() {
     e.preventDefault();
     setErr("");
     setMsg("");
+    if (!requestNumber.trim()) {
+      setErr("Request Number is required.");
+      return;
+    }
     const all = [...numbers];
     if (numberInput.trim()) all.push(numberInput.trim());
     if (all.length === 0) {
@@ -66,21 +70,21 @@ export default function ClientPage() {
     }
     try {
       const created = await createRequest({
+        request_number: requestNumber.trim(),
         numbers: all,
         request_type: requestType,
         duration_days: durationDays ? parseInt(durationDays, 10) : null,
         case_officer: caseOfficer,
         justification,
-        request_date: requestDate || null,
       });
       setMsg(`Created ${created.request_id}`);
+      setRequestNumber("");
       setNumbers([]);
       setNumberInput("");
       setRequestType("");
       setDurationDays("");
       setCaseOfficer("");
       setJustification("");
-      setRequestDate("");
       refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -118,7 +122,8 @@ export default function ClientPage() {
             </button>
           </div>
           <p className="muted">
-            Columns: Numbers, Request Type, Duration Days, Case Officer, Justification, Request Date
+            Columns: Request Number, Mobile/CNIC/IMEI No, Request Type, Duration Days, Case Officer,
+            Justification
           </p>
           {importMsg && <div className="ok">{importMsg}</div>}
           {importErr && <div className="error">{importErr}</div>}
@@ -127,7 +132,11 @@ export default function ClientPage() {
         <form className="card" onSubmit={submit}>
           <h2>New Request</h2>
           <div className="field">
-            <label>Numbers (Mobile / NIC / other)</label>
+            <label>Request Number</label>
+            <input value={requestNumber} onChange={(e) => setRequestNumber(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>Mobile/CNIC/IMEI No</label>
             <div className="row">
               <input
                 value={numberInput}
@@ -186,10 +195,6 @@ export default function ClientPage() {
             <div className="field">
               <label>Case Officer</label>
               <input value={caseOfficer} onChange={(e) => setCaseOfficer(e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Request Date</label>
-              <input type="date" value={requestDate} onChange={(e) => setRequestDate(e.target.value)} />
             </div>
           </div>
           <div className="field">

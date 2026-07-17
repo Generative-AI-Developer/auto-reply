@@ -17,6 +17,7 @@ export interface RequestNumber {
 export interface RequestItem {
   id: number;
   request_id: string;
+  request_number: string | null;
   owner_user_id: string;
   numbers: RequestNumber[];
   request_type: string;

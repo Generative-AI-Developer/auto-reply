@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -37,10 +37,23 @@ class User(Base):
 
 
 class Request(Base):
+    """request_id (REQ-00001, ...) is system-generated and permanent.
+
+    request_number is user-supplied at creation time and unique per owner
+    (nullable only because requests created before this field existed have
+    none). Submitting the same request_number again for the same owner
+    merges the new numbers into that existing request rather than creating a
+    second one - see routers/requests.py::_create_request. The permanent
+    folder for a request is named after request_number when the request has
+    one, falling back to request_id for legacy requests that don't.
+    """
+
     __tablename__ = "requests"
+    __table_args__ = (UniqueConstraint("owner_id", "request_number", name="uq_owner_request_number"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    request_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 
     request_type: Mapped[str] = mapped_column(String(50), default="")  # e.g. NIC, CDR, IPDR

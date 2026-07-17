@@ -6,6 +6,7 @@ def request_to_out(req: Request) -> RequestOut:
     return RequestOut(
         id=req.id,
         request_id=req.request_id,
+        request_number=req.request_number,
         owner_user_id=req.owner.user_id if req.owner else "",
         numbers=[
             RequestNumberOut(

@@ -24,24 +24,41 @@ def _create_request(db: Session, owner: User, payload: RequestCreate) -> Request
     if not numbers:
         raise HTTPException(status_code=422, detail="At least one number is required")
 
-    req = Request(
-        request_id=f"tmp-{uuid4().hex}",
-        owner_id=owner.id,
-        request_type=payload.request_type,
-        duration_days=payload.duration_days,
-        case_officer=payload.case_officer,
-        justification=payload.justification,
-        request_date=payload.request_date,
+    request_number = payload.request_number.strip()
+    if not request_number:
+        raise HTTPException(status_code=422, detail="Request Number is required")
+
+    # Same requester submitting the same Request Number again adds to that
+    # existing request (one request_id) instead of creating a duplicate.
+    req = db.scalar(
+        select(Request).where(Request.owner_id == owner.id, Request.request_number == request_number)
     )
-    db.add(req)
-    db.flush()  # assigns req.id
-    req.request_id = f"REQ-{req.id:05d}"
+    if req is None:
+        req = Request(
+            request_id=f"tmp-{uuid4().hex}",
+            owner_id=owner.id,
+            request_number=request_number,
+            request_type=payload.request_type,
+            duration_days=payload.duration_days,
+            case_officer=payload.case_officer,
+            justification=payload.justification,
+            request_date=date.today(),
+        )
+        db.add(req)
+        db.flush()  # assigns req.id
+        req.request_id = f"REQ-{req.id:05d}"
+
+    existing_values = {ident.value for ident in req.identifiers}
     for value in dict.fromkeys(numbers):  # de-dupe, preserve order
-        db.add(RequestIdentifier(request_id=req.id, value=value, status=Status.PENDING))
+        if value not in existing_values:
+            db.add(RequestIdentifier(request_id=req.id, value=value, status=Status.PENDING))
 
     # Permanent per-request folder inside the user's permanent folder, ready to
-    # receive matched response files: main/<user_id>/<request_id>/
-    (Path(settings.main_dir) / owner.user_id / req.request_id).mkdir(parents=True, exist_ok=True)
+    # receive matched response files: main/<user_id>/<request_number>/ (falls
+    # back to request_id, unreachable here since request_number is always set
+    # on a request created through this function).
+    folder_name = req.request_number or req.request_id
+    (Path(settings.main_dir) / owner.user_id / folder_name).mkdir(parents=True, exist_ok=True)
     return req
 
 

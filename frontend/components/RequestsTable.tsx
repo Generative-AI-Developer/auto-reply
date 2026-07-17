@@ -54,7 +54,8 @@ export default function RequestsTable({
           <tr>
             {showOwner && <th>User</th>}
             <th>Request ID</th>
-            <th>Number</th>
+            <th>Request Number</th>
+            <th>Mobile/CNIC/IMEI No</th>
             <th>Request Type</th>
             <th>Days</th>
             <th>Case Officer</th>
@@ -68,6 +69,7 @@ export default function RequestsTable({
             <tr key={n ? n.id : r.id}>
               {showOwner && <td>{r.owner_user_id}</td>}
               <td>{r.request_id}</td>
+              <td>{r.request_number || "—"}</td>
               <td>{n ? n.value : "—"}</td>
               <td>{r.request_type || "—"}</td>
               <td>{r.duration_days ?? "—"}</td>
