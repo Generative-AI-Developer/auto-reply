@@ -23,6 +23,7 @@ The observer watches main/ non-recursively, so writes into the nested
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shutil
 import time
@@ -58,6 +59,17 @@ def _wait_stable(path: Path, tries: int = 10, interval: float = 0.4) -> bool:
         last = size
         time.sleep(interval)
     return path.exists()
+
+
+def _sha256(path: Path) -> str | None:
+    try:
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
 
 
 def _unique_dest(folder: Path, filename: str) -> Path:
@@ -126,6 +138,7 @@ def _route_file(
 ) -> list[str]:
     """Match one already-filtered file against Pending identifiers and distribute it."""
     routed: list[str] = []
+    incoming_hash = _sha256(path)
     with SessionLocal() as db:
         matches = find_matches(db, numbers)
         if not matches:
@@ -140,6 +153,20 @@ def _route_file(
 
         for ident in matches:
             req = ident.request
+            # Sent/Awaited numbers keep matching so multi-part responses all
+            # arrive; skip only when this identifier already holds a file with
+            # identical content (an operator re-dropping the same file).
+            if incoming_hash is not None and any(
+                _sha256(Path(f.stored_path)) == incoming_hash for f in ident.files
+            ):
+                log.info(
+                    "Duplicate of %s already delivered to %s / %s -> skipped",
+                    path.name,
+                    req.request_id,
+                    ident.value,
+                )
+                routed.append(req.request_id)
+                continue
             # Folder already exists (created eagerly at request-submission time).
             # Named after request_number when the request has one, else request_id
             # (legacy requests created before request_number existed).
@@ -168,7 +195,7 @@ def _route_file(
                     "event": "status_changed",
                     "request_id": ident.request.request_id,
                     "number": ident.value,
-                    "status": Status.SENT,
+                    "status": ident.status,
                 }
             )
 
