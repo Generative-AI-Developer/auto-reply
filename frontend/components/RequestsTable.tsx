@@ -60,7 +60,7 @@ export default function RequestsTable({
             <th>Days</th>
             <th>Case Officer</th>
             <th>Justification</th>
-            <th>Date</th>
+            <th>Date/Time</th>
             <th>Status</th>
           </tr>
         </thead>

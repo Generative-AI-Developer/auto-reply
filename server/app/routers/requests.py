@@ -113,7 +113,7 @@ def list_requests(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Users see their own requests; admins see all. `q` searches Request ID + any number.
+    """Users see their own requests; admins see all. `q` searches Request Number + any number.
 
     `status_filter` matches requests that have AT LEAST ONE number in that status
     (status is tracked per-number, not per-request).
@@ -132,12 +132,29 @@ def list_requests(
     elif owner:
         stmt = stmt.join(User, User.id == Request.owner_id).where(User.user_id == owner)
 
+    terms: set[str] = set()
     if q:
-        like = f"%{q.strip()}%"
-        number_match = exists().where(
-            (RequestIdentifier.request_id == Request.id) & (RequestIdentifier.value.ilike(like))
-        )
-        stmt = stmt.where(or_(Request.request_id.ilike(like), number_match))
+        # Numbers are stored in whatever format they arrived in (03xx… local or
+        # 92xx… international), so search both spellings of the query.
+        terms = {q.strip()}
+        digits = normalize_number(q)
+        if digits:
+            terms.add(digits)
+            if digits.startswith("0"):
+                terms.add("92" + digits[1:])
+            elif digits.startswith("92"):
+                terms.add("0" + digits[2:])
+        conds = []
+        for term in terms:
+            like = f"%{term}%"
+            conds.append(Request.request_number.ilike(like))
+            conds.append(
+                exists().where(
+                    (RequestIdentifier.request_id == Request.id)
+                    & (RequestIdentifier.value.ilike(like))
+                )
+            )
+        stmt = stmt.where(or_(*conds))
 
     if status_filter:
         status_match = exists().where(
@@ -149,7 +166,20 @@ def list_requests(
     if case_officer:
         stmt = stmt.where(Request.case_officer.ilike(f"%{case_officer}%"))
 
-    return [request_to_out(r) for r in db.scalars(stmt).unique().all()]
+    outs = []
+    lowered = [t.lower() for t in terms]
+    for r in db.scalars(stmt).unique().all():
+        out = request_to_out(r)
+        # When searching by number, show only the matching number rows; a hit
+        # on the Request Number itself still shows the whole request.
+        if lowered and not (
+            r.request_number and any(t in r.request_number.lower() for t in lowered)
+        ):
+            out.numbers = [
+                n for n in out.numbers if any(t in n.value.lower() for t in lowered)
+            ]
+        outs.append(out)
+    return outs
 
 
 @router.get("/{request_id}", response_model=RequestOut)

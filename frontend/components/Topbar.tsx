@@ -26,11 +26,10 @@ export default function Topbar({ subtitle }: { subtitle: string }) {
 
   return (
     <div className="topbar">
-      <h1>
-        Auto-Reply <span className="muted">— {subtitle}</span>
-      </h1>
+      <div />
+      <h1>{subtitle}</h1>
       <div className="muted">
-        {session ? `${session.user_id} (${session.role})` : ""}{" "}
+        {session ? session.user_id : ""}{" "}
         <button className="secondary small" onClick={logout}>
           Sign out
         </button>

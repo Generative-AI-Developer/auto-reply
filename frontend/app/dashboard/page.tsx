@@ -78,10 +78,10 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Topbar subtitle="Server Dashboard" />
+      <Topbar subtitle="ADMIN DASHBOARD" />
       <div className="container">
         <div className="card">
-          <h2>Add User</h2>
+          <h2 style={{ textAlign: "center" }}>Add User</h2>
           <form onSubmit={onAddUser}>
             <div className="row">
               <div className="field">
@@ -101,19 +101,21 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-            <button type="submit">Create User</button>
+            <div style={{ textAlign: "center" }}>
+              <button type="submit">Create User</button>
+            </div>
             {userMsg && <div className="ok">{userMsg}</div>}
             {userErr && <div className="error">{userErr}</div>}
           </form>
         </div>
 
         <div className="card">
-          <h2>All Requests (live)</h2>
+          <h2 style={{ textAlign: "center" }}>All Requests (live)</h2>
           <div className="row search">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="🔍 Search by Request ID or number (mobile / NIC / any)…"
+              placeholder="🔍 Search by Request Number or Mobile/CNIC/IMEI No…"
             />
             <select
               style={{ flex: "0 0 200px" }}
