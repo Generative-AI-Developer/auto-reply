@@ -1,15 +1,18 @@
+import io
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import Response
+from openpyxl import Workbook
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..config import get_settings
 from ..deps import get_current_user, get_db, require_admin
 from ..models import Request, RequestIdentifier, Role, Status, User
-from ..schemas import ImportResult, RequestCreate, RequestOut, StatusUpdate
+from ..schemas import ExportPayload, ImportResult, RequestCreate, RequestOut, StatusUpdate
 from ..serializers import request_to_out
 from ..services.excel import parse_excel
 from ..services.parsers import normalize_number
@@ -180,6 +183,73 @@ def list_requests(
             ]
         outs.append(out)
     return outs
+
+
+@router.post("/export")
+def export_requests(
+    payload: ExportPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Export the given number rows to an .xlsx mirroring the dashboard table."""
+    if not payload.identifier_ids:
+        raise HTTPException(status_code=422, detail="No rows to export")
+
+    idents = db.scalars(
+        select(RequestIdentifier)
+        .where(RequestIdentifier.id.in_(payload.identifier_ids))
+        .options(selectinload(RequestIdentifier.request).selectinload(Request.owner))
+        .join(Request, Request.id == RequestIdentifier.request_id)
+        .order_by(Request.created_at.desc(), RequestIdentifier.id)
+    ).all()
+    if not idents:
+        raise HTTPException(status_code=404, detail="No matching rows")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Requests"
+    ws.append(
+        [
+            "User",
+            "Request ID",
+            "Request Number",
+            "Mobile/CNIC/IMEI No",
+            "Request Type",
+            "Days",
+            "Case Officer",
+            "Justification",
+            "Date/Time",
+            "Status",
+        ]
+    )
+    for ident in idents:
+        req = ident.request
+        ws.append(
+            [
+                req.owner.user_id if req.owner else "",
+                req.request_id,
+                req.request_number or "",
+                ident.value,
+                req.request_type or "",
+                req.duration_days,
+                req.case_officer or "",
+                req.justification or "",
+                req.created_at.strftime("%Y-%m-%d %H:%M") if req.created_at else "",
+                ident.status,
+            ]
+        )
+        # Force the number cell to text so Excel doesn't render long numbers
+        # (e.g. 923005931121) in scientific notation.
+        ws.cell(row=ws.max_row, column=4).number_format = "@"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = f"requests-export-{date.today().isoformat()}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{request_id}", response_model=RequestOut)

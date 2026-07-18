@@ -91,6 +91,19 @@ export async function importRequests(file: File): Promise<ImportResultShape> {
   return handle<ImportResultShape>(res);
 }
 
+export async function exportRequests(identifierIds: number[]): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/requests/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ identifier_ids: identifierIds }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 export async function updateNumberStatus(
   requestId: string,
   identifierId: number,

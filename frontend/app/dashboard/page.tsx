@@ -6,6 +6,7 @@ import Topbar from "@/components/Topbar";
 import RequestsTable from "@/components/RequestsTable";
 import {
   addUser,
+  exportRequests,
   getSession,
   listRequests,
   requestsSocket,
@@ -21,6 +22,7 @@ export default function DashboardPage() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [err, setErr] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   // Add user form
   const [newUserId, setNewUserId] = useState("");
@@ -31,7 +33,12 @@ export default function DashboardPage() {
 
   const refresh = useCallback(async () => {
     try {
-      setRequests(await listRequests({ q, status_filter: statusFilter }));
+      const items = await listRequests({ q, status_filter: statusFilter });
+      setRequests(items);
+      // Drop selected rows that are no longer visible so a stale selection
+      // can't silently end up in an export.
+      const visible = new Set(items.flatMap((r) => r.numbers.map((n) => n.id)));
+      setSelected((prev) => new Set([...prev].filter((id) => visible.has(id))));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -56,6 +63,30 @@ export default function DashboardPage() {
     try {
       await updateNumberStatus(requestId, identifierId, status);
       refresh();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  async function onExport() {
+    setErr("");
+    const ids =
+      selected.size > 0
+        ? [...selected]
+        : requests.flatMap((r) => r.numbers.map((n) => n.id));
+    if (ids.length === 0) {
+      setErr("Nothing to export.");
+      return;
+    }
+    try {
+      const blob = await exportRequests(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `requests-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSelected(new Set());
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -128,9 +159,24 @@ export default function DashboardPage() {
                 </option>
               ))}
             </select>
+            <button type="button" style={{ flex: "0 0 auto" }} onClick={onExport}>
+              Export to Excel{selected.size > 0 ? ` (${selected.size} selected)` : ""}
+            </button>
           </div>
+          <p className="muted">
+            Click rows to select them (Shift+click for a range), then Export to Excel. With
+            nothing selected, all rows currently shown are exported. Double-click any cell to
+            copy its value.
+          </p>
           {err && <div className="error">{err}</div>}
-          <RequestsTable requests={requests} showOwner onStatusChange={onStatusChange} />
+          <RequestsTable
+            requests={requests}
+            showOwner
+            onStatusChange={onStatusChange}
+            selectable
+            selected={selected}
+            onSelect={setSelected}
+          />
         </div>
       </div>
     </>

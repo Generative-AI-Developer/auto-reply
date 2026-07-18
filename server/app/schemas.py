@@ -87,6 +87,10 @@ class StatusUpdate(BaseModel):
         return self.status in Status.MANUAL
 
 
+class ExportPayload(BaseModel):
+    identifier_ids: list[int]
+
+
 class ImportResult(BaseModel):
     created: int
     failed: int

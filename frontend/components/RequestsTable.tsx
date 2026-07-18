@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { MANUAL_STATUSES, RequestItem, RequestNumber } from "@/lib/types";
 
 function statusClass(status: string): string {
@@ -31,17 +32,62 @@ export default function RequestsTable({
   showOwner = false,
   onStatusChange,
   perspective = "admin",
+  selectable = false,
+  selected,
+  onSelect,
 }: {
   requests: RequestItem[];
   showOwner?: boolean;
   onStatusChange?: (requestId: string, identifierId: number, status: string) => void;
   perspective?: "admin" | "client";
+  selectable?: boolean;
+  selected?: Set<number>;
+  onSelect?: (next: Set<number>) => void;
 }) {
+  // Anchor for shift+click range selection: the identifier id last clicked.
+  const lastClickedRef = useRef<number | null>(null);
+
   const rows: Row[] = requests.flatMap((r) =>
     r.numbers.length > 0
       ? r.numbers.map((n): Row => ({ request: r, number: n }))
       : [{ request: r, number: null }]
   );
+
+  function handleRowClick(identifierId: number, shiftKey: boolean) {
+    if (!selectable || !onSelect) return;
+    const next = new Set(selected ?? []);
+    const anchor = lastClickedRef.current;
+    if (shiftKey && anchor !== null && anchor !== identifierId) {
+      const ids = rows.filter((row) => row.number).map((row) => row.number!.id);
+      const a = ids.indexOf(anchor);
+      const b = ids.indexOf(identifierId);
+      if (a !== -1 && b !== -1) {
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(ids[i]);
+      } else {
+        next.add(identifierId);
+      }
+    } else if (next.has(identifierId)) {
+      next.delete(identifierId);
+    } else {
+      next.add(identifierId);
+    }
+    lastClickedRef.current = identifierId;
+    onSelect(next);
+  }
+
+  // Double-click any cell copies its text (rows use user-select:none when
+  // selectable, so native text selection isn't available there). The two
+  // clicks of a double-click toggle row selection on and off again, so the
+  // selection state is left untouched.
+  function handleCellCopy(e: React.MouseEvent<HTMLTableSectionElement>) {
+    const td = (e.target as HTMLElement).closest("td");
+    if (!td || td.querySelector("select")) return;
+    const text = td.innerText.trim();
+    if (!text || text === "—") return;
+    navigator.clipboard?.writeText(text);
+    td.classList.add("copied");
+    setTimeout(() => td.classList.remove("copied"), 700);
+  }
 
   if (rows.length === 0) {
     return <p className="muted">No requests found.</p>;
@@ -64,9 +110,17 @@ export default function RequestsTable({
             <th>Status</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody onDoubleClick={handleCellCopy}>
           {rows.map(({ request: r, number: n }) => (
-            <tr key={n ? n.id : r.id}>
+            <tr
+              key={n ? n.id : r.id}
+              className={
+                selectable && n
+                  ? `selectable${selected?.has(n.id) ? " selected" : ""}`
+                  : undefined
+              }
+              onClick={(e) => n && handleRowClick(n.id, e.shiftKey)}
+            >
               {showOwner && <td>{r.owner_user_id}</td>}
               <td>{r.request_id}</td>
               <td>{r.request_number || "—"}</td>
@@ -79,6 +133,7 @@ export default function RequestsTable({
               <td>
                 {n && onStatusChange ? (
                   <select
+                    onClick={(e) => e.stopPropagation()}
                     value={MANUAL_STATUSES.includes(n.status as never) ? n.status : ""}
                     onChange={(e) => e.target.value && onStatusChange(r.request_id, n.id, e.target.value)}
                   >
