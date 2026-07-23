@@ -22,3 +22,28 @@ def init_db() -> None:
     from . import models  # noqa: F401  (register models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """Additive, idempotent migration for columns added after a table first
+    shipped (there's no Alembic yet, and create_all never alters an existing
+    table). SQLite and PostgreSQL both support `ALTER TABLE ... ADD COLUMN`;
+    existing rows take the column default, so this is safe to run every start.
+    """
+    from sqlalchemy import inspect, text
+
+    additions = {
+        "request_identifiers": {
+            "part": "INTEGER DEFAULT 0",
+            "date_from": "DATE",
+            "date_to": "DATE",
+        },
+    }
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in additions.items():
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))

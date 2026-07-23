@@ -56,7 +56,10 @@ class Request(Base):
     request_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 
-    request_type: Mapped[str] = mapped_column(String(50), default="")  # e.g. NIC, CDR, IPDR
+    request_type: Mapped[str] = mapped_column(String(50), default="")  # CDR, IMEI, Gateway
+    # Ufone / Mobilink / Telenor / Zong. Supplied by the requester, never derived
+    # from the number prefix: ported (MNP) numbers make the prefix unreliable.
+    network: Mapped[str] = mapped_column(String(50), default="")
     duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     case_officer: Mapped[str] = mapped_column(String(255), default="")
     justification: Mapped[str] = mapped_column(Text, default="")
@@ -86,6 +89,25 @@ class RequestIdentifier(Base):
     request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
     value: Mapped[str] = mapped_column(String(50), index=True)
     status: Mapped[str] = mapped_column(String(20), default=Status.PENDING, index=True)
+
+    # request_type / network / duration live per-number, not per-request: one
+    # request_number (e.g. As-123460) can mix CDR, IMEI, NIC, FT ... rows, each
+    # with its own network and duration (or none). The export groups on these.
+    request_type: Mapped[str] = mapped_column(String(50), default="")
+    network: Mapped[str] = mapped_column(String(50), default="")
+    duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # A single entered number can fan out into several independently-tracked
+    # records: a network-less IMEI becomes one row per operator, and a Telenor
+    # CDR over 180 days becomes two date-window rows. `part` is the window index
+    # (1 or 2) for that Telenor split, 0 for a normal single-window record.
+    # date_from/date_to persist the window so it doesn't drift with today()
+    # between request and response time: the export renders exactly this window
+    # and the watcher attributes an incoming file to the window that contains
+    # its date. Both are null for non-split rows.
+    part: Mapped[int] = mapped_column(Integer, default=0)
+    date_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    date_to: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     request: Mapped["Request"] = relationship(back_populates="identifiers")
     files: Mapped[list["ResponseFile"]] = relationship(

@@ -83,7 +83,7 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `requests-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `requests-export-${new Date().toISOString().slice(0, 10)}.docx`;
       a.click();
       URL.revokeObjectURL(url);
       setSelected(new Set());
@@ -160,13 +160,14 @@ export default function DashboardPage() {
               ))}
             </select>
             <button type="button" style={{ flex: "0 0 auto" }} onClick={onExport}>
-              Export to Excel{selected.size > 0 ? ` (${selected.size} selected)` : ""}
+              Export{selected.size > 0 ? ` (${selected.size} selected)` : ""}
             </button>
           </div>
           <p className="muted">
-            Click rows to select them (Shift+click for a range), then Export to Excel. With
-            nothing selected, all rows currently shown are exported. Double-click any cell to
-            copy its value.
+            Click rows to select them (Shift+click for a range), then Export. With nothing
+            selected, all rows currently shown are exported. The Word file groups numbers by
+            request type and network, in each operator&apos;s own format. Double-click any cell
+            to copy its value.
           </p>
           {err && <div className="error">{err}</div>}
           <RequestsTable

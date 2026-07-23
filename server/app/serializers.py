@@ -13,11 +13,18 @@ def request_to_out(req: Request) -> RequestOut:
                 id=i.id,
                 value=i.value,
                 status=i.status,
+                request_type=i.request_type,
+                network=i.network,
+                duration_days=i.duration_days,
+                part=i.part or 0,
+                date_from=i.date_from,
+                date_to=i.date_to,
                 files=[ResponseFileOut.model_validate(f) for f in i.files],
             )
             for i in req.identifiers
         ],
         request_type=req.request_type,
+        network=req.network,
         duration_days=req.duration_days,
         case_officer=req.case_officer,
         justification=req.justification,

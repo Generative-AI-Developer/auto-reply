@@ -40,7 +40,8 @@ class UserOut(BaseModel):
 class RequestCreate(BaseModel):
     request_number: str = Field(min_length=1, description="user-supplied, unique per requester")
     numbers: list[str] = Field(default_factory=list, description="mobile / NIC / IMEI / any other numbers")
-    request_type: str = Field(default="", description="e.g. NIC, CDR, IPDR")
+    request_type: str = Field(default="", description="CDR, IMEI, Gateway")
+    network: str = Field(default="", description="Ufone, Mobilink, Telenor, Zong")
     duration_days: int | None = None
     case_officer: str = ""
     justification: str = ""
@@ -61,6 +62,13 @@ class RequestNumberOut(BaseModel):
     id: int
     value: str
     status: str
+    request_type: str = ""
+    network: str = ""
+    duration_days: int | None = None
+    # Telenor CDR split window: part 1/2 and its date range (0/None otherwise).
+    part: int = 0
+    date_from: date | None = None
+    date_to: date | None = None
     files: list[ResponseFileOut] = []
 
 
@@ -73,6 +81,7 @@ class RequestOut(BaseModel):
     owner_user_id: str
     numbers: list[RequestNumberOut]
     request_type: str
+    network: str
     duration_days: int | None
     case_officer: str
     justification: str

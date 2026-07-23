@@ -102,6 +102,7 @@ export default function RequestsTable({
             <th>Request ID</th>
             <th>Request Number</th>
             <th>Mobile/CNIC/IMEI No</th>
+            <th>Network</th>
             <th>Request Type</th>
             <th>Days</th>
             <th>Case Officer</th>
@@ -125,8 +126,26 @@ export default function RequestsTable({
               <td>{r.request_id}</td>
               <td>{r.request_number || "—"}</td>
               <td>{n ? n.value : "—"}</td>
-              <td>{r.request_type || "—"}</td>
-              <td>{r.duration_days ?? "—"}</td>
+              <td>
+                {(n ? n.network : r.network) || "—"}
+                {n && n.part ? (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: "0.72em",
+                      padding: "1px 6px",
+                      borderRadius: 4,
+                      background: "#1f4e79",
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Set {n.part}/2
+                  </span>
+                ) : null}
+              </td>
+              <td>{(n ? n.request_type : r.request_type) || "—"}</td>
+              <td>{(n ? n.duration_days : r.duration_days) ?? "—"}</td>
               <td>{r.case_officer || "—"}</td>
               <td>{r.justification || "—"}</td>
               <td>{formatDateTime(r.created_at)}</td>

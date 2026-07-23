@@ -1,7 +1,7 @@
 """Parse a bulk-upload .xlsx into RequestCreate rows.
 
 Expected headers (case-insensitive; extra columns ignored):
-  Request Number | Numbers | Request Type | Duration Days | Case Officer | Justification
+  Request Number | Numbers | Network | Request Type | Duration Days | Case Officer | Justification
 `Numbers` (Mobile/CNIC/IMEI No) may hold several values separated by comma /
 semicolon / newline. `Request Number` is required and is user-supplied
 (unique per requester) - see routers/requests.py::_create_request for the
@@ -31,6 +31,8 @@ _HEADER_ALIASES = {
     "mobile/cnic/imei no": "numbers",
     "request type": "request_type",
     "type": "request_type",
+    "network": "network",
+    "operator": "network",
     "duration days": "duration_days",
     "duration": "duration_days",
     "days": "duration_days",
@@ -102,6 +104,7 @@ def parse_excel(data: bytes) -> tuple[list[RequestCreate], list[str]]:
                 request_number=request_number,
                 numbers=numbers,
                 request_type=str(fields.get("request_type") or ""),
+                network=str(fields.get("network") or ""),
                 duration_days=duration_days,
                 case_officer=str(fields.get("case_officer") or ""),
                 justification=str(fields.get("justification") or ""),

@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
-from openpyxl import Workbook
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,7 +13,9 @@ from ..deps import get_current_user, get_db, require_admin
 from ..models import Request, RequestIdentifier, Role, Status, User
 from ..schemas import ExportPayload, ImportResult, RequestCreate, RequestOut, StatusUpdate
 from ..serializers import request_to_out
+from ..services.docx_export import build_export_document
 from ..services.excel import parse_excel
+from ..services.formats import expand_identifier_specs
 from ..services.parsers import normalize_number
 from ..services.ws_manager import manager
 
@@ -42,6 +43,7 @@ def _create_request(db: Session, owner: User, payload: RequestCreate) -> Request
             owner_id=owner.id,
             request_number=request_number,
             request_type=payload.request_type,
+            network=payload.network,
             duration_days=payload.duration_days,
             case_officer=payload.case_officer,
             justification=payload.justification,
@@ -51,10 +53,35 @@ def _create_request(db: Session, owner: User, payload: RequestCreate) -> Request
         db.flush()  # assigns req.id
         req.request_id = f"REQ-{req.id:05d}"
 
-    existing_values = {ident.value for ident in req.identifiers}
+    # De-dupe on (value, network, part), not value alone: a single entered
+    # number fans out into several records that share the value but differ by
+    # operator (network-less IMEI -> one per operator) or by date window
+    # (Telenor CDR > 180 days -> two parts), and re-submitting the same
+    # request_number must stay idempotent across all of them.
+    existing = {(i.value, i.network, i.part or 0) for i in req.identifiers}
+    today = date.today()
     for value in dict.fromkeys(numbers):  # de-dupe, preserve order
-        if value not in existing_values:
-            db.add(RequestIdentifier(request_id=req.id, value=value, status=Status.PENDING))
+        for network, part, date_from, date_to, days in expand_identifier_specs(
+            payload.request_type, payload.network, payload.duration_days, today
+        ):
+            if (value, network, part) in existing:
+                continue
+            existing.add((value, network, part))
+            # Stamp each number with this row's type / network / duration, so a
+            # later row reusing the same request_number keeps its own attributes
+            # instead of inheriting the request's first row. A Telenor split
+            # carries its own per-window duration (180 per set), not the span.
+            db.add(RequestIdentifier(
+                request_id=req.id,
+                value=value,
+                status=Status.PENDING,
+                request_type=payload.request_type,
+                network=network,
+                duration_days=days,
+                part=part,
+                date_from=date_from,
+                date_to=date_to,
+            ))
 
     # Permanent per-request folder inside the user's permanent folder, ready to
     # receive matched response files: main/<user_id>/<request_number>/ (falls
@@ -191,7 +218,13 @@ def export_requests(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Export the given number rows to an .xlsx mirroring the dashboard table."""
+    """Export the given number rows as a .docx of ready-to-submit operator formats.
+
+    Each network wants its own syntax, so the rows are grouped by
+    (request type, network, days) and rendered by services/formats.py. Rows we
+    have no format for - Zong, or a blank network - land in a trailing manual
+    section rather than being silently dropped.
+    """
     if not payload.identifier_ids:
         raise HTTPException(status_code=422, detail="No rows to export")
 
@@ -205,49 +238,28 @@ def export_requests(
     if not idents:
         raise HTTPException(status_code=404, detail="No matching rows")
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Requests"
-    ws.append(
-        [
-            "User",
-            "Request ID",
-            "Request Number",
-            "Mobile/CNIC/IMEI No",
-            "Request Type",
-            "Days",
-            "Case Officer",
-            "Justification",
-            "Date/Time",
-            "Status",
-        ]
-    )
-    for ident in idents:
-        req = ident.request
-        ws.append(
-            [
-                req.owner.user_id if req.owner else "",
-                req.request_id,
-                req.request_number or "",
-                ident.value,
-                req.request_type or "",
-                req.duration_days,
-                req.case_officer or "",
-                req.justification or "",
-                req.created_at.strftime("%Y-%m-%d %H:%M") if req.created_at else "",
-                ident.status,
-            ]
+    rows = [
+        (
+            ident.network,
+            ident.request_type,
+            ident.duration_days,
+            ident.value,
+            # A persisted Telenor split window renders as exactly that one date
+            # range instead of being re-split from days at export time.
+            (ident.date_from, ident.date_to)
+            if ident.date_from and ident.date_to
+            else None,
         )
-        # Force the number cell to text so Excel doesn't render long numbers
-        # (e.g. 923005931121) in scientific notation.
-        ws.cell(row=ws.max_row, column=4).number_format = "@"
+        for ident in idents
+    ]
+    doc = build_export_document(rows)
 
     buf = io.BytesIO()
-    wb.save(buf)
-    filename = f"requests-export-{date.today().isoformat()}.xlsx"
+    doc.save(buf)
+    filename = f"requests-export-{date.today().isoformat()}.docx"
     return Response(
         content=buf.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

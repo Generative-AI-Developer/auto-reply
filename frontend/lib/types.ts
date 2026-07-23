@@ -11,6 +11,13 @@ export interface RequestNumber {
   id: number;
   value: string;
   status: RequestStatus;
+  request_type: string;
+  network: string;
+  duration_days: number | null;
+  // Telenor CDR split window: part 1/2 with its date range (0/null otherwise).
+  part: number;
+  date_from: string | null;
+  date_to: string | null;
   files: ResponseFile[];
 }
 
@@ -21,6 +28,7 @@ export interface RequestItem {
   owner_user_id: string;
   numbers: RequestNumber[];
   request_type: string;
+  network: string;
   duration_days: number | null;
   case_officer: string;
   justification: string;
